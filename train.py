@@ -1,4 +1,4 @@
-from music21 import converter, instrument, note, chord, stream, corpus
+import pretty_midi
 import glob
 import numpy as np
 from keras.utils import np_utils
@@ -11,48 +11,52 @@ import os
 
 
 def one_notes(file):
-    add_notes = []
+    nround = 2
 
-    midi = converter.parse(file)
-    # midi.show('text')
+    add_notes = []
 
     print("Parsing %s" % file)
 
-    parts = midi.parts
-    stream_map = {}
-    for p in parts:
-        for element in p.notes:
-            if element.duration.type != 'zero':
-                if element.offset not in stream_map:
-                    stream_map[element.offset] = []
-                instrName = p.getInstrument(returnDefault=True).instrumentName
-                item = [element, instrName]
-                stream_map[element.offset].append(item)
+    midi_data = pretty_midi.PrettyMIDI(file)
+
+    midi_map = {}
+    for instrument in midi_data.instruments:
+        for note in instrument.notes:
+            note.start = round(note.start, nround)
+            note.end = round(note.end, nround)
+            if note.start not in midi_map:
+                midi_map[note.start] = []
+            midi_map[note.start].append([note, instrument])
 
     last_time = 0
-    for time in sorted(stream_map.keys()):
-        notes_in_time = [str(time-last_time)]
+    for time in sorted(midi_map.keys()):
+        notes_in_time = []
 
-        for item in stream_map[time]:
-            element, instrName = item
+        diff = round(time - last_time, nround)
+        if diff > 0:
+            notes_in_time.append(str(diff))
 
-            if isinstance(element, note.Note):
-                notes_in_time.append("{},{},{}".format(str(element.pitch), element.quarterLength, instrName))
-            elif isinstance(element, chord.Chord):
-                notes_in_time.append("{},{},{}".format('.'.join(str(n) for n in element.normalOrder), element.quarterLength, instrName))
+        for item in midi_map[time]:
+            note, instrument = item
+            duration = round(note.end-note.start, nround)
+            notes_in_time.append("{},{},{}".format(note.pitch, duration, instrument.program))
         add_notes += notes_in_time
         last_time = time
 
-    add_notes.append("$")  # signifies end of sample
+    if add_notes:
+        add_notes.append("$")  # signifies end of sample
 
-    return add_notes
+        return add_notes
+    else:
+        return []
 
 
 def get_notes():
     """ Get all the notes and chords from the midi files in the midi songs directory """
     all_notes = []
 
-    files = glob.glob("data/midi/*.mid")[:25]
+    # files = glob.glob("data/midi/*.mid")[:2]
+    files = ["data/midi/CELTIC.MID"]
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=20) as executor:
         future_to_idx = {executor.submit(one_notes, file): i
@@ -60,9 +64,9 @@ def get_notes():
         for future in concurrent.futures.as_completed(future_to_idx):
             idx = future_to_idx[future]
             add = future.result()
-            print(idx, add)
+            print("{}/{}".format(idx+1, len(files)), add)
             all_notes += add
-    # all_notes += one_notes("data/palace.mid")
+    # all_notes += one_notes("data/midi/palace.mid")
 
     with open('data/notes', 'wb') as f:
         pickle.dump(all_notes, f)
@@ -100,7 +104,6 @@ network_input = np.reshape(network_input, (n_patterns, sequence_length, 1))
 # normalize input
 network_input = network_input / float(n_vocab)
 network_output = np_utils.to_categorical(network_output)
-
 
 model = Sequential()
 

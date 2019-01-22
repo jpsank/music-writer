@@ -1,4 +1,4 @@
-from music21 import converter, instrument, note, chord, stream
+import pretty_midi
 import glob
 import numpy as np
 from keras.utils import np_utils
@@ -7,13 +7,12 @@ from keras.layers import Dropout, Dense, Activation, LSTM
 from keras.callbacks import ModelCheckpoint
 import concurrent.futures
 import pickle, os
-from fractions import Fraction
 
 
 with open('data/notes', 'rb') as filepath:
     notes = pickle.load(filepath)
 
-print(notes)
+# print(notes)
 print("Preparing sequences...")
 
 sequence_length = 100
@@ -60,7 +59,7 @@ model.add(Activation('softmax'))
 model.compile(loss='categorical_crossentropy', optimizer='rmsprop')
 
 # Load the weights to each node
-model.load_weights('weights-improvement-79-1.2277-bigger.hdf5')
+model.load_weights('weights-improvement-12-4.6276-bigger.hdf5')
 
 print("Generating notes...")
 
@@ -73,7 +72,7 @@ pattern = network_input[start]
 prediction_output = []
 
 # generate 500 notes
-for note_index in range(500):  # default 500
+for note_index in range(300):  # default 500
     prediction_input = np.reshape(pattern, (1, len(pattern), 1))
     prediction_input = prediction_input / float(n_vocab)
 
@@ -86,54 +85,36 @@ for note_index in range(500):  # default 500
     pattern = np.vstack((pattern,index))
     pattern = pattern[1:len(pattern)]
 
-print("Prediction output:",prediction_output)
+print("Prediction output:", prediction_output)
 print("Creating midi...")
 
-output_parts = {}
+midi = pretty_midi.PrettyMIDI()
+
+
+instruments = {}
 offset = 0
 for element in prediction_output:
-    if "," not in element:  # increase offset pointer
+    if "," not in element:
         if element == "$":  # end of song, wait one second
             offset += 1
-        else:
-            offset += Fraction(element)
+        else:  # element must be delay between note/chords
+            offset += float(element)
     else:  # musical element pointer
-        pattern, duration, instrName = element.split(",")
+        note_number, duration, instrProgram = element.split(",")
+        note_number = int(note_number)
+        duration = float(duration)
+        instrProgram = int(instrProgram)
 
-        if instrName == "None":
-            instr = instrument.Piano()
-        elif instrName == "StringInstrument":
-            instr = instrument.StringInstrument()
-        elif instrName == "Guitar":
-            instr = instrument.Guitar()
-        else:
-            instr = instrument.fromString(instrName)
-        if instrName not in output_parts:
-            output_parts[instrName] = []
+        if instrProgram not in instruments:
+            instr = pretty_midi.Instrument(program=instrProgram)
+            instruments[instrProgram] = instr
 
-        if ('.' in pattern) or pattern.isdigit():  # pattern is a chord
-            notes_in_chord = pattern.split('.')
-            notes = []
-            for current_note in notes_in_chord:
-                new_note = note.Note(int(current_note))
-                new_note.storedInstrument = instr
-                notes.append(new_note)
-            new_chord = chord.Chord(notes)
-            new_chord.offset = offset
-            output_parts[instrName].append(new_chord)
-        else:  # pattern is a note
-            new_note = note.Note(pattern)
-            new_note.offset = offset
-            new_note.storedInstrument = instr
-            output_parts[instrName].append(new_note)
+        new_note = pretty_midi.Note(velocity=100, pitch=note_number, start=offset, end=offset+duration)
+        instruments[instrProgram].notes.append(new_note)
 
-output_data = [stream.Part(output_parts[name]) for name in output_parts]
+for instr in instruments:
+    midi.instruments.append(instruments[instr])
 
-
-if os.path.exists("test_output.mid"):
-    os.remove("test_output.mid")
-
-midi_stream = stream.Stream(output_data)
-midi_stream.write('midi', fp='test_output.mid')
+midi.write('test_output.mid')
 
 print("Done")
