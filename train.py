@@ -26,20 +26,25 @@ def one_notes(file):
             note.end = round(note.end, nround)
             if note.start not in midi_map:
                 midi_map[note.start] = []
-            midi_map[note.start].append([note, instrument])
+            midi_map[note.start].append(["on", note, instrument])
+            if note.end not in midi_map:
+                midi_map[note.end] = []
+            midi_map[note.end].append(["off", note, instrument])
 
     last_time = 0
     for time in sorted(midi_map.keys()):
         notes_in_time = []
 
-        diff = round(time - last_time, nround)
-        if diff > 0:
-            notes_in_time.append(str(diff))
+        diff = round(time - last_time, nround) * 1000  # convert to milliseconds
+        for step in range(10):  # time shifts are quantized
+            step = 100 - step*10
+            while diff >= step:
+                notes_in_time.append(str(step/1000))
+                diff -= step
 
         for item in midi_map[time]:
-            note, instrument = item
-            duration = round(note.end-note.start, nround)
-            notes_in_time.append("{},{},{}".format(note.pitch, duration, instrument.program))
+            on, note, instrument = item
+            notes_in_time.append("{}{}-{}".format(on, note.pitch, instrument.program))
         add_notes += notes_in_time
         last_time = time
 

@@ -59,7 +59,7 @@ model.add(Activation('softmax'))
 model.compile(loss='categorical_crossentropy', optimizer='rmsprop')
 
 # Load the weights to each node
-model.load_weights('weights-improvement-12-4.6276-bigger.hdf5')
+model.load_weights('weights-improvement-10-2.8671-bigger.hdf5')
 
 print("Generating notes...")
 
@@ -91,26 +91,30 @@ print("Creating midi...")
 midi = pretty_midi.PrettyMIDI()
 
 
+timing_map = {}
 instruments = {}
 offset = 0
 for element in prediction_output:
-    if "," not in element:
-        if element == "$":  # end of song, wait one second
-            offset += 1
-        else:  # element must be delay between note/chords
-            offset += float(element)
-    else:  # musical element pointer
-        note_number, duration, instrProgram = element.split(",")
-        note_number = int(note_number)
-        duration = float(duration)
+    if element.startswith("on"):  # note on pointer
+        element = element[2:]
+        timing_map[element] = offset
+    elif element.startswith("off"):  # note off pointer
+        element = element[3:]
+        pitch, instrProgram = element.split("-")
+        pitch = int(pitch)
         instrProgram = int(instrProgram)
 
         if instrProgram not in instruments:
             instr = pretty_midi.Instrument(program=instrProgram)
             instruments[instrProgram] = instr
 
-        new_note = pretty_midi.Note(velocity=100, pitch=note_number, start=offset, end=offset+duration)
+        new_note = pretty_midi.Note(velocity=100, pitch=pitch, start=timing_map[element], end=offset)
         instruments[instrProgram].notes.append(new_note)
+    else:
+        if element == "$":  # end of song, wait one second
+            offset += 1
+        else:  # element must be delay between note/chords
+            offset += float(element)
 
 for instr in instruments:
     midi.instruments.append(instruments[instr])

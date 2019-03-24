@@ -4,6 +4,7 @@ saved/
 data/
 venv/
 test.py
+test2.py
 .idea/
 test_output.mid
 .DS_Store
