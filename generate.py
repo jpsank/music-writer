@@ -108,8 +108,9 @@ for element in prediction_output:
             instr = pretty_midi.Instrument(program=instrProgram)
             instruments[instrProgram] = instr
 
-        new_note = pretty_midi.Note(velocity=100, pitch=pitch, start=timing_map[element], end=offset)
-        instruments[instrProgram].notes.append(new_note)
+        if element in timing_map:  # condition in case network makes erroneous midi representation
+            new_note = pretty_midi.Note(velocity=100, pitch=pitch, start=timing_map[element], end=offset)
+            instruments[instrProgram].notes.append(new_note)
     else:
         if element == "$":  # end of song, wait one second
             offset += 1
