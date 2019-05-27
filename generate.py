@@ -6,11 +6,11 @@ from keras.models import Sequential
 from keras.layers import Dropout, Dense, Activation, LSTM
 from keras.callbacks import ModelCheckpoint
 import concurrent.futures
-import pickle, os
+import json, os
 
 
-with open('data/notes', 'rb') as filepath:
-    notes = pickle.load(filepath)
+with open('data/notes', 'rb') as f:
+    notes = json.load(f)
 
 # print(notes)
 print("Preparing sequences...")
@@ -59,7 +59,7 @@ model.add(Activation('softmax'))
 model.compile(loss='categorical_crossentropy', optimizer='rmsprop')
 
 # Load the weights to each node
-model.load_weights('weights-improvement-10-2.8671-bigger.hdf5')
+model.load_weights('weights-improvement-03-3.5134-bigger.hdf5')
 
 print("Generating notes...")
 
@@ -108,16 +108,17 @@ for element in prediction_output:
             instr = pretty_midi.Instrument(program=instrProgram)
             instruments[instrProgram] = instr
 
-        if element in timing_map:  # condition in case network makes erroneous midi representation
-            new_note = pretty_midi.Note(velocity=100, pitch=pitch, start=timing_map[element], end=offset)
-            instruments[instrProgram].notes.append(new_note)
+        new_note = pretty_midi.Note(velocity=100, pitch=pitch, start=timing_map[element], end=offset)
+        instruments[instrProgram].notes.append(new_note)
     else:
         if element == "$":  # end of song, wait one second
             offset += 1
-        else:  # element must be delay between note/chords
-            offset += float(element)
+        elif element.startswith("rest"):  # element must be delay between note/chords
+            element = element[4:]
+            offset += midi.tick_to_time(int(element)*10)
 
 for instr in instruments:
+    print(instruments[instr].notes)
     midi.instruments.append(instruments[instr])
 
 midi.write('test_output.mid')

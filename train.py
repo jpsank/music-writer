@@ -6,13 +6,11 @@ from keras.models import Sequential
 from keras.layers import Dropout, Dense, Activation, LSTM
 from keras.callbacks import ModelCheckpoint
 import concurrent.futures
-import pickle
 import os
+import json
 
 
 def one_notes(file):
-    nround = 2
-
     add_notes = []
 
     print("Parsing %s" % file)
@@ -22,8 +20,8 @@ def one_notes(file):
     midi_map = {}
     for instrument in midi_data.instruments:
         for note in instrument.notes:
-            note.start = round(note.start, nround)
-            note.end = round(note.end, nround)
+            note.start = int(midi_data.time_to_tick(note.start) / 10)
+            note.end = int(midi_data.time_to_tick(note.end) / 10)
             if note.start not in midi_map:
                 midi_map[note.start] = []
             midi_map[note.start].append(["on", note, instrument])
@@ -33,18 +31,13 @@ def one_notes(file):
 
     last_time = 0
     for time in sorted(midi_map.keys()):
-        notes_in_time = []
-
-        diff = round(time - last_time, nround) * 1000  # convert to milliseconds
-        for step in range(10):  # time shifts are quantized
-            step = 100 - step*10
-            while diff >= step:
-                notes_in_time.append(str(step/1000))
-                diff -= step
-
+        notes_in_time = [
+            "rest{}".format(time-last_time)
+        ]
         for item in midi_map[time]:
             on, note, instrument = item
             notes_in_time.append("{}{}-{}".format(on, note.pitch, instrument.program))
+
         add_notes += notes_in_time
         last_time = time
 
@@ -61,7 +54,7 @@ def get_notes():
     all_notes = []
 
     # files = glob.glob("data/midi/*.mid")[:2]
-    files = ["data/midi/CELTIC.MID"]
+    files = ["data/midi/Fugue1.mid"]
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=20) as executor:
         future_to_idx = {executor.submit(one_notes, file): i
@@ -74,14 +67,14 @@ def get_notes():
     # all_notes += one_notes("data/midi/palace.mid")
 
     with open('data/notes', 'wb') as f:
-        pickle.dump(all_notes, f)
+        json.dump(all_notes, f)
 
     return all_notes
 
 
 if os.path.exists("data/notes"):
-    with open('data/notes', 'rb') as filepath:
-        notes = pickle.load(filepath)
+    with open('data/notes', 'rb') as f:
+        notes = json.load(f)
 else:
     notes = get_notes()
 
