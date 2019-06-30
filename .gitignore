@@ -9,3 +9,5 @@ test2.py
 test_output.mid
 .DS_Store
 
+__pycache__/
+save/
