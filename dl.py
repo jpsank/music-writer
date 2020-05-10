@@ -3,7 +3,7 @@ import os
 import concurrent.futures
 
 
-def dl_result(result,idx,out):
+def dl_result(result, out):
     idn = result["id"]
     name = result["name"]
 
@@ -11,12 +11,12 @@ def dl_result(result,idx,out):
     fp = os.path.join(out, fname)
 
     if not os.path.exists(fp):
-        print(" ",idx, fname)
-
-        downloadUrl = "https://bitmidi.com" + result["downloadUrl"]
-        r = requests.get(downloadUrl)
+        download_url = "https://bitmidi.com" + result["downloadUrl"]
+        r = requests.get(download_url)
         with open(fp, "wb") as f:
             f.write(r.content)
+
+        return fname
 
 
 def dl_all(out, page=0):
@@ -25,26 +25,24 @@ def dl_all(out, page=0):
     results = j["result"]["results"]
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=32) as executor:
-        future_to_idx = {executor.submit(dl_result, result, i, out): i
-                         for i, result in enumerate(results)}
-        for future in concurrent.futures.as_completed(future_to_idx):
-            idx = future_to_idx[future]
-            future.result()
+        futures = [executor.submit(dl_result, result, out) for result in results]
+        for future in concurrent.futures.as_completed(futures):
+            if res := future.result():
+                print(res)
 
 
 def csvify(midi_dir,csv_dir):
     for fname in os.listdir(midi_dir):
         fp1 = os.path.join(midi_dir, fname)
-        fp2 = os.path.join(csv_dir ,fname[:-4]+".csv")
+        fp2 = os.path.join(csv_dir, fname[:-4]+".csv")
         if not os.path.exists(fp2):
             print(fname)
             os.system("midicsv {} {}".format(fp1,fp2))
 
 
-for i in range(1):
-    print("Page number ",i)
-    dl_all("data/midi",i)
+for p in range(1):
+    print("Page number", p)
+    dl_all("data/midi/downloaded", p)
 
-#csvify("data/midi","data/csv")
-
+# csvify("data/midi","data/csv")
 

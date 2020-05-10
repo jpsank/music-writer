@@ -1,30 +1,32 @@
-import pretty_midi
 from keras.utils import np_utils
 from keras.models import Sequential
 from keras.layers import Dropout, Dense, Activation, LSTM
 from keras.callbacks import ModelCheckpoint
 import numpy as np
 
-import tensorflow as tf
-from keras.backend.tensorflow_backend import set_session
+# import tensorflow as tf
+# from keras.backend.tensorflow_backend import set_session
 
-config = tf.ConfigProto()
-config.gpu_options.allow_growth = True  # dynamically grow the memory used on the GPU
-# config.log_device_placement = True  # to log device placement (on which device the operation ran)
+# config = tf.ConfigProto()
+# config.gpu_options.allow_growth = True  # dynamically grow the memory used on the GPU
+# # config.log_device_placement = True  # to log device placement (on which device the operation ran)
+#
+# sess = tf.Session(config=config)
+# set_session(sess)  # set this TensorFlow session as the default session for Keras
 
-sess = tf.Session(config=config)
-set_session(sess)  # set this TensorFlow session as the default session for Keras
+SEQUENCE_LENGTH = 100
 
 
 class NeuralNetwork:
     def __init__(self, notes):
         print("Preparing sequences...")
-        self.n_vocab, self.network_input, self.network_output, self.note_to_int, self.int_to_note = self.parse_notes(notes)
+        self.n_vocab, self.network_input, self.network_output, self.note_to_int, self.int_to_note = \
+            self.parse_notes(notes)
 
         print("Creating network...")
         self.network = self.build_network()
 
-    def parse_notes(self, notes, sequence_length=100):
+    def parse_notes(self, notes, sequence_length=SEQUENCE_LENGTH):
         pitchnames = sorted(set(item for item in notes))
 
         n_vocab = len(pitchnames)
@@ -55,14 +57,14 @@ class NeuralNetwork:
         model = Sequential()
 
         model.add(LSTM(
-            256,
+            512,
             input_shape=(self.network_input.shape[1], self.network_input.shape[2]),
             return_sequences=True
         ))
         model.add(Dropout(0.3))
         model.add(LSTM(512, return_sequences=True))
         model.add(Dropout(0.3))
-        model.add(LSTM(256))
+        model.add(LSTM(512))
         model.add(Dense(256))
         model.add(Dropout(0.3))
         model.add(Dense(self.n_vocab))
@@ -85,8 +87,7 @@ class NeuralNetwork:
         callbacks_list = [checkpoint]
         self.network.fit(self.network_input, self.network_output, epochs=200, batch_size=64, callbacks=callbacks_list)
 
-    def predict(self, n=500):
-        start = 0
+    def predict(self, n=500, start=0):
         print("start:", start)
 
         pattern = self.network_input[start]
@@ -110,73 +111,3 @@ class NeuralNetwork:
             pattern = pattern[1:len(pattern)]
 
         return prediction_output
-
-
-def encode_representation(midi_data):
-    add_notes = []
-
-    midi_map = {}
-    for instrument in midi_data.instruments:
-        for note in instrument.notes:
-            note.start = int(midi_data.time_to_tick(note.start) / 10)
-            note.end = int(midi_data.time_to_tick(note.end) / 10)
-            if note.start not in midi_map:
-                midi_map[note.start] = []
-            midi_map[note.start].append(["on", note, instrument])
-            if note.end not in midi_map:
-                midi_map[note.end] = []
-            midi_map[note.end].append(["off", note, instrument])
-
-    last_time = 0
-    for time in sorted(midi_map.keys()):
-        notes_in_time = [
-            "rest{}".format(time - last_time)
-        ]
-        for item in midi_map[time]:
-            on, note, instrument = item
-            notes_in_time.append("{}{}-{}".format(on, note.pitch, instrument.program))
-
-        add_notes += notes_in_time
-        last_time = time
-
-    if add_notes:
-        return ["^"] + add_notes + ["$"]  # signify start and end of sample
-    else:
-        return []
-
-
-def decode_representation(rep_sequence, tempo=120):
-    midi = pretty_midi.PrettyMIDI(initial_tempo=tempo)
-
-    timing_map = {}
-    instruments = {}
-    offset = 0
-    for element in rep_sequence:
-        if element.startswith("on"):  # note on pointer
-            element = element[2:]
-            timing_map[element] = offset
-        elif element.startswith("off"):  # note off pointer
-            element = element[3:]
-            pitch, instr_program = element.split("-")
-            pitch = int(pitch)
-            instr_program = int(instr_program)
-
-            if instr_program not in instruments:
-                instr = pretty_midi.Instrument(program=instr_program)
-                instruments[instr_program] = instr
-
-            if element in timing_map:  # in case the model creates invalid midi
-                new_note = pretty_midi.Note(velocity=100, pitch=pitch, start=timing_map[element], end=offset)
-                instruments[instr_program].notes.append(new_note)
-        else:
-            if element == "$":  # end of song, wait one second
-                offset += 1
-            elif element.startswith("rest"):  # element must be delay between note/chords
-                element = element[4:]
-                offset += midi.tick_to_time(int(element) * 10)
-
-    for instr in instruments:
-        print(instruments[instr].notes)
-        midi.instruments.append(instruments[instr])
-
-    return midi

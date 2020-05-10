@@ -1,24 +1,23 @@
-import numpy as np
-import json, os
+from model import NeuralNetwork
+from util import decode_representation, load_notes
+from config import *
 
-from model import decode_representation, NeuralNetwork
 
-
-with open('data/notes.json', 'r') as f:
-    notes = json.load(f)
-
+print("Loading saved notes...")
+notes = load_notes()
 
 model = NeuralNetwork(notes)
-model.load_weights('weights-improvement-14-1.5380-bigger.hdf5')
+print("Loading weights...")
+model.load_weights(WEIGHTS)
 
-print("Generating notes...")
+print("Generating prediction...")
 
-prediction_output = model.predict(500)
+prediction_output = model.predict(NUM_PREDICTION, START)
 
 print("Prediction output:", prediction_output)
 print("Creating midi...")
 
-midi = decode_representation(prediction_output, tempo=600)
-midi.write('test_output.mid')
+midi = decode_representation(prediction_output, tempo=TEMPO)
+midi.write(OUTPUT)
 
 print("Done")

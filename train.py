@@ -1,53 +1,53 @@
 import pretty_midi
-import glob
-import numpy as np
-import concurrent.futures
 import os
-import json
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from model import encode_representation, NeuralNetwork
+from model import NeuralNetwork
+from util import encode_representation, load_notes, save_notes
+from config import *
 
 
-def sample_to_notes(file):
-    print("Parsing %s" % file)
-
+def extract_notes(file):
     try:
         midi_data = pretty_midi.PrettyMIDI(file)
         return encode_representation(midi_data)
     except Exception as e:
-        print("ERROR", e)
+        print("Error:", e)
         return []
 
 
-def get_notes():
-    """ Get all the notes and chords from the midi files in the midi songs directory """
-    all_notes = []
+def extract_all():
+    """ Extract midi input files to notes representation """
 
-    # files = glob.glob("data/midi/beethoven/*.mid")
-    # files = ["data/midi/beethoven/firstmvm.mid","data/midi/beethoven/secondmv.mid","data/midi/beethoven/thirdmvm.mid"]
-    files = ["data/midi/Pokemon XY - Battle Wild Pokemon.mid"]
+    results = []
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=20) as executor:
-        future_to_idx = {executor.submit(sample_to_notes, file): i
-                         for i, file in enumerate(files)}
-        for future in concurrent.futures.as_completed(future_to_idx):
+    with ThreadPoolExecutor() as executor:
+        future_to_idx = {
+            executor.submit(extract_notes, file): i
+            for i, file in enumerate(INPUT_FILES)
+        }
+        for future in as_completed(future_to_idx):
             idx = future_to_idx[future]
-            add = future.result()
-            print("{}/{}".format(idx+1, len(files)), add)
-            all_notes += add
+            res = future.result()
+            results.extend(res)
+            print(f"{idx}/{len(INPUT_FILES)}, {len(results)} total")
 
-    with open('data/notes.json', 'w') as f:
-        json.dump(all_notes, f)
-
-    return all_notes
+    return results
 
 
-if os.path.exists("data/notes.json"):
-    with open('data/notes.json', 'r') as f:
-        notes = json.load(f)
-else:
-    notes = get_notes()
+if __name__ == '__main__':
+    if os.path.exists(SAVE_NOTES):
+        print("Loading saved notes...")
+        notes = load_notes()
+    else:
+        print("Extracting notes from midi files...")
+        notes = extract_all()
 
-model = NeuralNetwork(notes)
-model.train()
+        print("Saving notes...")
+        save_notes(notes)
 
+    print("Training...")
+    print()
+
+    model = NeuralNetwork(notes)
+    model.train()

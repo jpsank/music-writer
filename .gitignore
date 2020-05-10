@@ -3,6 +3,7 @@
 saved/
 data/
 venv/
+.venv/
 test.py
 test2.py
 .idea/
