@@ -18,15 +18,19 @@ SEQUENCE_LENGTH = 100
 
 
 class NeuralNetwork:
-    def __init__(self, notes):
+    def __init__(self, notes, sequence_length=SEQUENCE_LENGTH):
+        self.sequence_length = sequence_length
+
         print("Preparing sequences...")
         self.n_vocab, self.network_input, self.network_output, self.note_to_int, self.int_to_note = \
             self.parse_notes(notes)
 
+        self.primer = None
+
         print("Creating network...")
         self.network = self.build_network()
 
-    def parse_notes(self, notes, sequence_length=SEQUENCE_LENGTH):
+    def parse_notes(self, notes):
         pitchnames = sorted(set(item for item in notes))
 
         n_vocab = len(pitchnames)
@@ -39,19 +43,22 @@ class NeuralNetwork:
         network_input = []
         network_output = []
         # create input sequences and the corresponding outputs
-        for i in range(0, len(notes) - sequence_length, 1):
-            sequence_in = notes[i:i + sequence_length]
-            sequence_out = notes[i + sequence_length]
+        for i in range(0, len(notes) - self.sequence_length, 1):
+            sequence_in = notes[i:i + self.sequence_length]
+            sequence_out = notes[i + self.sequence_length]
             network_input.append([note_to_int[char] for char in sequence_in])
             network_output.append(note_to_int[sequence_out])
         n_patterns = len(network_input)
         # reshape the input into a format compatible with LSTM layers
-        network_input = np.reshape(network_input, (n_patterns, sequence_length, 1))
+        network_input = np.reshape(network_input, (n_patterns, self.sequence_length, 1))
         # normalize input
         network_input = network_input / float(n_vocab)
         network_output = np_utils.to_categorical(network_output)
 
         return n_vocab, network_input, network_output, note_to_int, int_to_note
+
+    def set_primer(self, notes):
+        self.primer = notes[:self.sequence_length]
 
     def build_network(self):
         model = Sequential()
@@ -87,10 +94,11 @@ class NeuralNetwork:
         callbacks_list = [checkpoint]
         self.network.fit(self.network_input, self.network_output, epochs=200, batch_size=64, callbacks=callbacks_list)
 
-    def predict(self, n=500, start=0):
-        print("start:", start)
-
-        pattern = self.network_input[start]
+    def predict(self, n=500):
+        if self.primer:
+            pattern = self.primer
+        else:
+            pattern = self.network_input[0]
         prediction_output = []
 
         # generate n notes
